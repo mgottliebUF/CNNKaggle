@@ -1,0 +1,107 @@
+# This Python 3 environment comes with many helpful analytics libraries installed
+# It is defined by the kaggle/python Docker image: https://github.com/kaggle/docker-python
+# For example, here's several helpful packages to load
+
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+
+# Input data files are available in the read-only "../input/" directory
+# For example, running this (by clicking run or pressing Shift+Enter) will list all files under the input directory
+
+import os
+for dirname, _, filenames in os.walk('/kaggle/input'):
+    for filename in filenames:
+        print(os.path.join(dirname, filename))
+
+# You can write up to 20GB to the current directory (/kaggle/working/) that gets preserved as output when you create a version using "Save & Run All" 
+# You can also write temporary files to /kaggle/temp/, but they won't be saved outside of the current session
+
+# Section 1: Importing Pac kages
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+
+# Section 2: Data Loading and Initial Setup
+test_dir = '/kaggle/input/histopathologic-cancer-detection/test/'
+submission_file = '/kaggle/input/histopathologic-cancer-detection/sample_submission.csv'
+
+# Load the sample submission file
+df = pd.read_csv(submission_file, dtype=str)
+
+# Display the shape and the first few rows of the dataframe
+print(f"Dataframe shape: {df.shape}")
+print(df.head())
+
+# Section 3: Data Preprocessing and Preparation for Modeling
+# Create a 'path' column with the full path to each test image
+df['path'] = df.id + '.tif'
+print(df['path'].head())
+
+# Data augmentation for robust predictions
+test_datagen = ImageDataGenerator(
+    rescale=1/255,
+    rotation_range=40,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True,
+    fill_mode='nearest'
+)
+
+BATCH_SIZE = 64
+IMG_SIZE = (128, 128)
+
+# Creating the test data loader
+test_loader = test_datagen.flow_from_dataframe(
+    dataframe=df,
+    directory=test_dir,
+    x_col='path',
+    batch_size=BATCH_SIZE,
+    shuffle=False,
+    class_mode=None,
+    target_size=IMG_SIZE
+)
+
+# Section 4: Model Loading and Prediction
+model_path = '/kaggle/input/new-model-directory/new_model.h5'
+
+if os.path.exists(model_path):
+    model = load_model(model_path)
+else:
+    # Define the CNN model architecture
+    model = Sequential([
+        Conv2D(32, (3, 3), activation='relu', input_shape=(128, 128, 3)),
+        MaxPooling2D((2, 2)),
+        Conv2D(64, (3, 3), activation='relu'),
+        MaxPooling2D((2, 2)),
+        Conv2D(128, (3, 3), activation='relu'),
+        MaxPooling2D((2, 2)),
+        Flatten(),
+        Dense(512, activation='relu'),
+        Dropout(0.5),
+        Dense(1, activation='sigmoid')
+    ])
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+    # Note: Training the model should be done separately before prediction
+    # model.fit(train_loader, epochs=10, validation_data=validation_loader)
+    # model.save(model_path)
+
+# Predict probabilities for the test dataset
+test_probs = model.predict(test_loader)
+
+# Section 5: Creating and Saving Submission File
+submission = pd.read_csv(submission_file)
+submission.head()
+
+# Assign the predicted probabilities to the 'label' column
+submission['label'] = test_probs
+submission.head()
+
+# Save the submission file
+submission.to_csv('submission.csv', header=True, index=False)
